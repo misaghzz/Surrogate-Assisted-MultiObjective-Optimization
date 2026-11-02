@@ -1,20 +1,35 @@
-# Multi-Objective Optimization of a Thermal Energy System using Surrogate Modeling and NSGA-II
+# Surrogate-Assisted Multi-Objective Optimisation and Sequential Learning for a Heat Exchanger
 
-## 📌 Project Overview
-This project demonstrates an end-to-end framework for optimizing a thermal energy system (e.g., a heat exchanger). Since high-fidelity physical simulations (like CFD) are computationally expensive, this project uses **Machine Learning** to create a surrogate model, coupled with a **Genetic Algorithm (NSGA-II)** to find the optimal trade-off between competing objectives.
+This project compares two ways of optimising an "expensive" engineering model with few evaluations:
 
-## ⚙️ Methodology & Workflow
-1. **Data Generation:** Simulated 1000 data points for a thermal system with 3 design variables (Flow Rate, Temperature, Length).
-2. **Surrogate Modeling (AI):** Trained `RandomForestRegressor` models to learn the underlying thermodynamics and predict Heat Transfer and Pressure Drop in fractions of a second.
-3. **Multi-Objective Optimization:** Formulated the problem using the `pymoo` library to **Maximize Heat Transfer** while **Minimizing Pressure Drop**.
-4. **Decision Making:** Applied the Epsilon-Constraint method to filter out solutions exceeding the pump's physical limits and extracted the ultimate Golden Design Point.
+1. **Surrogate + evolutionary optimisation**: Random-Forest surrogates are trained on a 1,000-point design of experiments (DoE), then **NSGA-II** (`pymoo`) searches the trade-off between heat duty and pressure drop, subject to a pump limit.
+2. **Sequential learning (Bayesian optimisation)**: Gaussian-process surrogates and a **constrained Expected-Improvement** acquisition function choose each new evaluation one at a time.
 
-## 📊 Results: The Pareto Front
-The optimization successfully converged, generating a distinct Pareto front that physically proves the trade-off between heat transfer and pressure drop.
-![Pareto Front](Pareto_Front.png)
+## Model
+The "expensive" model stands in for a CFD run. It is a tube heat exchanger with a constant wall temperature.
+- Heat duty: ε-NTU method, with h ∝ ṁ^0.8 (Dittus–Boelter scaling)
+- Pressure drop: Blasius-type, ΔP ∝ L · ṁ^1.75
+- Design variables: mass flow rate (0.1–0.5 kg/s), inlet temperature (60–100 °C), tube length (1–5 m)
+- Constraint: ΔP ≤ 40 kPa
 
-## 🛠️ Technologies Used
-* **Python** (NumPy, Pandas)
-* **Scikit-Learn** (Random Forest for Surrogate Modeling)
-* **Pymoo** (NSGA-II for Evolutionary Optimization)
-* **Matplotlib** (Data Visualization)
+## Results (seed 42)
+| Method | True-model evaluations | Best feasible Q |
+|---|---|---|
+| NSGA-II on Random-Forest surrogates | 1,000 (training) | 24.0 kW, **violates** ΔP limit (42.4 kPa) |
+| Bayesian optimisation (GP + constrained EI) | 30 | ≈ 26.3 kW |
+| Random sampling | 30 | ≈ 22.3 kW |
+| True optimum (brute force, reference only) | 200,000 | 26.5 kW |
+
+Surrogate accuracy on held-out data: R² = 0.986 (Q) and 0.997 (ΔP).
+
+**Takeaways**
+- Surrogate errors are largest near active constraints. The design chosen on the surrogate must therefore be re-checked with the true model.
+- Over 5 other random seeds (0–4), Bayesian optimisation reached at least 98 % of the true optimum within 30 evaluations. Random sampling reached about 63–81 %. The NSGA-II design violated the ΔP limit in the true model in 4 of the 5 seeds.
+
+![Results](results_v2.png)
+
+## Run
+```bash
+pip install numpy scipy scikit-learn pymoo matplotlib
+python surrogate_moo_v2.py
+```
